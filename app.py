@@ -61,9 +61,10 @@ def delete_product(code):
 
 app = Dash(
     __name__,
-    suppress_callback_exceptions=True,
+    suppress_callback_exceptions=False,  # 🔴 CHANGE THIS
     external_stylesheets=[dbc.themes.BOOTSTRAP],
 )
+
 
 # =====================================================
 # LAYOUT
