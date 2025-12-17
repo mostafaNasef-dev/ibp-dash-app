@@ -27,24 +27,25 @@ def load_products():
             conn
         )
 
-def upsert_product(code, name, opening, capacity, cost):
-    with get_conn() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO products
-            (product_code, product_name, opening_inventory, monthly_capacity, unit_cost)
-            VALUES (%s,%s,%s,%s,%s)
-            ON CONFLICT (product_code)
-            DO UPDATE SET
-                product_name = EXCLUDED.product_name,
-                opening_inventory = EXCLUDED.opening_inventory,
-                monthly_capacity = EXCLUDED.monthly_capacity,
-                unit_cost = EXCLUDED.unit_cost
-            """,
-            (code, name, opening, capacity, cost)
-        )
-        conn.commit()
+def load_products():
+    try:
+        with get_conn() as conn:
+            df = pd.read_sql(
+                "SELECT * FROM public.products ORDER BY product_code",
+                conn
+            )
+            return df
+    except Exception as e:
+        print("DB ERROR:", e)
+        return pd.DataFrame(columns=[
+            "product_code",
+            "product_name",
+            "opening_inventory",
+            "monthly_capacity",
+            "unit_cost",
+            "created_at",
+        ])
+
 
 def delete_product(code):
     with get_conn() as conn:
