@@ -3,6 +3,8 @@ import dash_bootstrap_components as dbc
 import psycopg2
 import pandas as pd
 import os
+from dash import dash_table
+
 
 def get_conn():
     return psycopg2.connect(
@@ -105,22 +107,62 @@ def page_layout(title, text):
 )
 def render_page(pathname):
     if pathname == "/products":
-        return page_layout("📦 Product Master", "Manage products here")
-    if pathname == "/history":
-        return page_layout("📊 Historical Sales", "Upload 12 months of history")
-    if pathname == "/forecast":
-        return page_layout("🤖 Forecast & Models", "Run forecasting models")
-    if pathname == "/inventory":
-        return page_layout("🏭 Inventory & KPIs", "Inventory planning and KPIs")
-    if pathname == "/scenarios":
-        return page_layout("🧪 Scenario Comparison", "Compare demand scenarios")
-    if pathname == "/portfolio":
-        return page_layout("📦 Portfolio View", "Multi-product portfolio KPIs")
+    df = load_products()
 
-    return page_layout(
-        "🚀 IBP Dash App",
-        "Use the navigation menu to start planning."
-    )
+    return html.Div([
+        html.H2("📦 Product Master"),
+
+        dbc.Row([
+            dbc.Col([
+                dbc.Input(id="p-code", placeholder="Product Code"),
+                dbc.Input(id="p-name", placeholder="Product Name", className="mt-2"),
+                dbc.Input(id="p-open", type="number", placeholder="Opening Inventory", className="mt-2"),
+                dbc.Input(id="p-cap", type="number", placeholder="Monthly Capacity", className="mt-2"),
+                dbc.Input(id="p-cost", type="number", placeholder="Unit Cost", className="mt-2"),
+                dbc.Button("💾 Save Product", id="save-product", color="primary", className="mt-3"),
+                dbc.Button("🗑 Delete Product", id="delete-product", color="danger", className="mt-2"),
+            ], width=4),
+
+            dbc.Col([
+                dash_table.DataTable(
+                    id="product-table",
+                    data=df.to_dict("records"),
+                    columns=[{"name": c, "id": c} for c in df.columns],
+                    row_selectable="single",
+                    style_table={"overflowX": "auto"},
+                )
+            ], width=8)
+        ])
+    ])
+from dash import Input, Output, State
+
+@app.callback(
+    Output("product-table", "data"),
+    Input("save-product", "n_clicks"),
+    Input("delete-product", "n_clicks"),
+    State("p-code", "value"),
+    State("p-name", "value"),
+    State("p-open", "value"),
+    State("p-cap", "value"),
+    State("p-cost", "value"),
+    prevent_initial_call=True
+)
+def manage_products(save_clicks, delete_clicks, code, name, opening, capacity, cost):
+    ctx = dash.callback_context
+
+    if not ctx.triggered or not code:
+        return load_products().to_dict("records")
+
+    trigger = ctx.triggered[0]["prop_id"].split(".")[0]
+
+    if trigger == "save-product":
+        upsert_product(code, name, opening or 0, capacity or 0, cost or 0)
+
+    elif trigger == "delete-product":
+        delete_product(code)
+
+    return load_products().to_dict("records")
+
 
 # ---------------- Run ----------------
 if __name__ == "__main__":
