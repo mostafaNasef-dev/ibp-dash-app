@@ -4,10 +4,15 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, State
 import psycopg2
 import pandas as pd
+import numpy as np
 import os
 
+from statsmodels.tsa.holtwinters import SimpleExpSmoothing
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_percentage_error
+
 # =====================================================
-# DATABASE HELPERS
+# DATABASE
 # =====================================================
 
 def get_conn():
@@ -19,46 +24,22 @@ def get_conn():
         port=6543,
         sslmode="require",
     )
-html.Div(
-    f"Products loaded: {len(df)} rows",
-    style={"color": "green", "fontWeight": "bold"}
-),
 
 def load_products():
+    with get_conn() as conn:
+        return pd.read_sql("SELECT * FROM products ORDER BY product_code", conn)
+
+def load_history(product):
     with get_conn() as conn:
         return pd.read_sql(
-            "SELECT * FROM products ORDER BY product_code",
-            conn
+            "SELECT * FROM historical_sales WHERE product_code=%s ORDER BY month",
+            conn,
+            params=(product,),
         )
 
-def load_products():
-    try:
-        with get_conn() as conn:
-            df = pd.read_sql(
-                "SELECT * FROM public.products ORDER BY product_code",
-                conn
-            )
-            return df
-    except Exception as e:
-        print("DB ERROR:", e)
-        return pd.DataFrame(columns=[
-            "product_code",
-            "product_name",
-            "opening_inventory",
-            "monthly_capacity",
-            "unit_cost",
-            "created_at",
-        ])
-
-
-def delete_product(code):
+def insert_history(df):
     with get_conn() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM products WHERE product_code = %s",
-            (code,)
-        )
-        conn.commit()
+        df.to_sql("historical_sales", conn, if_exists="append", index=False, method="multi")
 
 # =====================================================
 # APP
@@ -66,10 +47,9 @@ def delete_product(code):
 
 app = Dash(
     __name__,
-    suppress_callback_exceptions=False,  # 🔴 CHANGE THIS
+    suppress_callback_exceptions=True,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
 )
-
 
 # =====================================================
 # LAYOUT
@@ -79,6 +59,7 @@ app.layout = html.Div([
     dcc.Location(id="url"),
 
     dbc.Row([
+
         dbc.Col(
             dbc.Nav(
                 [
@@ -100,136 +81,158 @@ app.layout = html.Div([
             },
         ),
 
-        dbc.Col(
-            html.Div(id="page-content", style={"padding": "30px"}),
-            width=10,
-        ),
+        dbc.Col(html.Div(id="page-content", style={"padding": "30px"}), width=10),
     ])
 ])
 
 # =====================================================
-# ROUTING
+# ROUTER
 # =====================================================
 
-from dash import Input, Output
-
-@app.callback(
-    Output("page-content", "children"),
-    Input("url", "pathname"),
-)
+@app.callback(Output("page-content", "children"), Input("url", "pathname"))
 def render_page(pathname):
 
-    # ---------- HOME ----------
+    products = load_products()
+
     if pathname in ["/", None]:
-        return html.Div([
-            html.H2("🚀 IBP Dash App"),
-            html.P("Select a page from the left menu to start."),
-        ])
+        return html.H3("🚀 IBP Dash App")
 
-    # ---------- PRODUCT MASTER ----------
-    if pathname == "/products":
-        df = load_products()
-
-        return html.Div([
-            html.H2("📦 Product Master"),
-
-            dbc.Row([
-                dbc.Col([
-                    dbc.Input(id="p-code", placeholder="Product Code"),
-                    dbc.Input(id="p-name", placeholder="Product Name", className="mt-2"),
-                    dbc.Input(id="p-open", type="number", placeholder="Opening Inventory", className="mt-2"),
-                    dbc.Input(id="p-cap", type="number", placeholder="Monthly Capacity", className="mt-2"),
-                    dbc.Input(id="p-cost", type="number", placeholder="Unit Cost", className="mt-2"),
-
-                    dbc.Button("💾 Save Product", id="save-product", color="primary", className="mt-3"),
-                    dbc.Button("🗑 Delete Product", id="delete-product", color="danger", className="mt-2"),
-                ], width=4),
-
-                dbc.Col([
-                    dash_table.DataTable(
-                        id="product-table",
-                        data=df.to_dict("records"),
-                        columns=[{"name": c, "id": c} for c in df.columns],
-                        row_selectable="single",
-                        style_table={"overflowX": "auto"},
-                        page_size=10,
-                    )
-                ], width=8),
-            ])
-        ])
-
-    # ---------- HISTORICAL SALES ----------
+    # =================================================
+    # HISTORICAL SALES
+    # =================================================
     if pathname == "/history":
         return html.Div([
-            html.H2("📊 Historical Sales"),
-            html.P("Historical sales upload & validation — coming next"),
+            html.H2("📊 Historical Sales Upload"),
+            dcc.Upload(
+                id="upload-sales",
+                children=dbc.Button("Upload CSV / Excel"),
+                multiple=False,
+            ),
+            html.Div(id="upload-status")
         ])
 
-    # ---------- FORECAST ----------
+    # =================================================
+    # FORECAST
+    # =================================================
     if pathname == "/forecast":
-        return html.Div([
-            html.H2("🤖 Forecast & Models"),
-            html.P("Forecast models, metrics, and selection — coming next"),
-        ])
+        product = products["product_code"].iloc[0]
+        hist = load_history(product)
 
-    # ---------- INVENTORY ----------
+        if hist.empty:
+            return html.Div(["No historical data available"])
+
+        y = hist["qty"].values
+
+        ses = SimpleExpSmoothing(y).fit()
+        ses_fc = ses.forecast(1)[0]
+        ses_mape = mean_absolute_percentage_error(y, ses.fittedvalues)
+
+        X = np.arange(len(y)).reshape(-1, 1)
+        rf = RandomForestRegressor()
+        rf.fit(X, y)
+        rf_fc = rf.predict([[len(y)]])[0]
+        rf_mape = mean_absolute_percentage_error(y, rf.predict(X))
+
+        df = pd.DataFrame({
+            "Model": ["SES", "RandomForest"],
+            "MAPE": [ses_mape, rf_mape],
+            "Forecast": [ses_fc, rf_fc],
+        })
+
+        return dash_table.DataTable(df.to_dict("records"),
+                                    [{"name": c, "id": c} for c in df.columns])
+
+    # =================================================
+    # INVENTORY
+    # =================================================
     if pathname == "/inventory":
-        return html.Div([
-            html.H2("🏭 Inventory & KPIs"),
-            html.P("Inventory simulation, turns, safety stock — coming next"),
-        ])
+        rows = []
+        for _, p in products.iterrows():
+            hist = load_history(p.product_code)
+            if hist.empty:
+                continue
 
-    # ---------- SCENARIOS ----------
+            avg = hist.qty.mean()
+            safety = hist.qty.std() * 1.65
+            turns = avg * 12 / max(p.opening_inventory, 1)
+
+            rows.append({
+                "Product": p.product_code,
+                "Safety Stock": round(safety, 1),
+                "Inventory Turns": round(turns, 2),
+            })
+
+        return dash_table.DataTable(rows, [{"name": k, "id": k} for k in rows[0]])
+
+    # =================================================
+    # SCENARIOS
+    # =================================================
     if pathname == "/scenarios":
-        return html.Div([
-            html.H2("🧪 Scenario Comparison"),
-            html.P("Demand & capacity scenarios — coming next"),
-        ])
+        rows = []
+        for _, p in products.iterrows():
+            hist = load_history(p.product_code)
+            if hist.empty:
+                continue
 
-    # ---------- PORTFOLIO ----------
+            base = hist.qty.mean()
+            for label, mult in [("Base", 1), ("+10%", 1.1), ("-10%", 0.9)]:
+                demand = base * mult
+                service = min(p.monthly_capacity / demand, 1)
+
+                rows.append({
+                    "Product": p.product_code,
+                    "Scenario": label,
+                    "Service_Level_%": round(service * 100, 1),
+                })
+
+        return dash_table.DataTable(rows, [{"name": k, "id": k} for k in rows[0]])
+
+    # =================================================
+    # PORTFOLIO
+    # =================================================
     if pathname == "/portfolio":
-        return html.Div([
-            html.H2("📦 Portfolio View"),
-            html.P("Multi-product KPIs — coming next"),
-        ])
+        rows = []
+        for _, p in products.iterrows():
+            hist = load_history(p.product_code)
+            if hist.empty:
+                continue
 
-    # ---------- FALLBACK ----------
-    return html.Div([
-        html.H2("404"),
-        html.P(f"Unknown page: {pathname}")
-    ])
+            annual = hist.qty.sum()
+            util = annual / (p.monthly_capacity * 12)
 
+            rows.append({
+                "Product": p.product_code,
+                "Annual_Demand": annual,
+                "Capacity_Util_%": round(util * 100, 1),
+                "Inventory_Value": p.opening_inventory * p.unit_cost,
+            })
+
+        return dash_table.DataTable(rows, [{"name": k, "id": k} for k in rows[0]])
+
+    return html.H3("404")
 
 # =====================================================
-# CALLBACKS
+# UPLOAD CALLBACK
 # =====================================================
 
 @app.callback(
-    Output("product-table", "data"),
-    Input("save-product", "n_clicks"),
-    Input("delete-product", "n_clicks"),
-    State("p-code", "value"),
-    State("p-name", "value"),
-    State("p-open", "value"),
-    State("p-cap", "value"),
-    State("p-cost", "value"),
-    prevent_initial_call=True
+    Output("upload-status", "children"),
+    Input("upload-sales", "contents"),
+    State("upload-sales", "filename"),
 )
-def manage_products(save_clicks, delete_clicks, code, name, opening, capacity, cost):
-    ctx = dash.callback_context
+def upload_sales(contents, filename):
+    if not contents:
+        return ""
 
-    if not ctx.triggered or not code:
-        return load_products().to_dict("records")
+    content_type, content_string = contents.split(",")
+    decoded = pd.read_csv(
+        pd.compat.StringIO(pd.compat.base64.b64decode(content_string).decode("utf-8"))
+    ) if filename.endswith(".csv") else pd.read_excel(
+        pd.compat.BytesIO(pd.compat.base64.b64decode(content_string))
+    )
 
-    trigger = ctx.triggered[0]["prop_id"].split(".")[0]
-
-    if trigger == "save-product":
-        upsert_product(code, name, opening or 0, capacity or 0, cost or 0)
-
-    elif trigger == "delete-product":
-        delete_product(code)
-
-    return load_products().to_dict("records")
+    insert_history(decoded)
+    return "Upload successful"
 
 # =====================================================
 # RUN
