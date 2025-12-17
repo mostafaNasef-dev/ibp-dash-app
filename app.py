@@ -16,9 +16,13 @@ def get_conn():
         database=os.environ["DB_NAME"],
         user=os.environ["DB_USER"],
         password=os.environ["DB_PASSWORD"],
-        port=5432,
+        port=6543,
         sslmode="require",
     )
+html.Div(
+    f"Products loaded: {len(df)} rows",
+    style={"color": "green", "fontWeight": "bold"}
+),
 
 def load_products():
     with get_conn() as conn:
