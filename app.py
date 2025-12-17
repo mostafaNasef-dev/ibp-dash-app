@@ -16,7 +16,7 @@ def get_conn():
         database=os.environ["DB_NAME"],
         user=os.environ["DB_USER"],
         password=os.environ["DB_PASSWORD"],
-        port=6543,
+        port=5432,
         sslmode="require",
     )
 
