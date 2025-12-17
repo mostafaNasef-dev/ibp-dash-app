@@ -111,7 +111,8 @@ app.layout = html.Div([
 )
 def render_page(pathname):
 
-    if pathname == "/products":
+    # ---------- Product Master ----------
+    if pathname in ["/", "/products"]:
         df = load_products()
 
         return html.Div([
@@ -124,6 +125,7 @@ def render_page(pathname):
                     dbc.Input(id="p-open", type="number", placeholder="Opening Inventory", className="mt-2"),
                     dbc.Input(id="p-cap", type="number", placeholder="Monthly Capacity", className="mt-2"),
                     dbc.Input(id="p-cost", type="number", placeholder="Unit Cost", className="mt-2"),
+
                     dbc.Button("💾 Save Product", id="save-product", color="primary", className="mt-3"),
                     dbc.Button("🗑 Delete Product", id="delete-product", color="danger", className="mt-2"),
                 ], width=4),
@@ -135,15 +137,30 @@ def render_page(pathname):
                         columns=[{"name": c, "id": c} for c in df.columns],
                         row_selectable="single",
                         style_table={"overflowX": "auto"},
+                        page_size=10,
                     )
-                ], width=8)
+                ], width=8),
             ])
         ])
 
-    return html.Div([
-        html.H2("🚀 IBP Dash App"),
-        html.P("Select a page from the left menu to start."),
-    ])
+    # ---------- Placeholder pages ----------
+    elif pathname == "/history":
+        return html.H3("📊 Historical Sales – coming next")
+
+    elif pathname == "/forecast":
+        return html.H3("🤖 Forecast & Models – coming next")
+
+    elif pathname == "/inventory":
+        return html.H3("🏭 Inventory & KPIs – coming next")
+
+    elif pathname == "/scenarios":
+        return html.H3("🧪 Scenario Comparison – coming next")
+
+    elif pathname == "/portfolio":
+        return html.H3("📦 Portfolio View – coming next")
+
+    # ---------- Fallback ----------
+    return html.H3("Select a page from the left menu")
 
 # =====================================================
 # CALLBACKS
