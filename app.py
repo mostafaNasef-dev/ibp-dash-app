@@ -105,14 +105,23 @@ app.layout = html.Div([
 # ROUTING
 # =====================================================
 
+from dash import Input, Output
+
 @app.callback(
     Output("page-content", "children"),
     Input("url", "pathname"),
 )
 def render_page(pathname):
 
-    # ---------- Product Master ----------
-    if pathname in ["/", "/products"]:
+    # ---------- HOME ----------
+    if pathname in ["/", None]:
+        return html.Div([
+            html.H2("🚀 IBP Dash App"),
+            html.P("Select a page from the left menu to start."),
+        ])
+
+    # ---------- PRODUCT MASTER ----------
+    if pathname == "/products":
         df = load_products()
 
         return html.Div([
@@ -143,24 +152,47 @@ def render_page(pathname):
             ])
         ])
 
-    # ---------- Placeholder pages ----------
-    elif pathname == "/history":
-        return html.H3("📊 Historical Sales – coming next")
+    # ---------- HISTORICAL SALES ----------
+    if pathname == "/history":
+        return html.Div([
+            html.H2("📊 Historical Sales"),
+            html.P("Historical sales upload & validation — coming next"),
+        ])
 
-    elif pathname == "/forecast":
-        return html.H3("🤖 Forecast & Models – coming next")
+    # ---------- FORECAST ----------
+    if pathname == "/forecast":
+        return html.Div([
+            html.H2("🤖 Forecast & Models"),
+            html.P("Forecast models, metrics, and selection — coming next"),
+        ])
 
-    elif pathname == "/inventory":
-        return html.H3("🏭 Inventory & KPIs – coming next")
+    # ---------- INVENTORY ----------
+    if pathname == "/inventory":
+        return html.Div([
+            html.H2("🏭 Inventory & KPIs"),
+            html.P("Inventory simulation, turns, safety stock — coming next"),
+        ])
 
-    elif pathname == "/scenarios":
-        return html.H3("🧪 Scenario Comparison – coming next")
+    # ---------- SCENARIOS ----------
+    if pathname == "/scenarios":
+        return html.Div([
+            html.H2("🧪 Scenario Comparison"),
+            html.P("Demand & capacity scenarios — coming next"),
+        ])
 
-    elif pathname == "/portfolio":
-        return html.H3("📦 Portfolio View – coming next")
+    # ---------- PORTFOLIO ----------
+    if pathname == "/portfolio":
+        return html.Div([
+            html.H2("📦 Portfolio View"),
+            html.P("Multi-product KPIs — coming next"),
+        ])
 
-    # ---------- Fallback ----------
-    return html.H3("Select a page from the left menu")
+    # ---------- FALLBACK ----------
+    return html.Div([
+        html.H2("404"),
+        html.P(f"Unknown page: {pathname}")
+    ])
+
 
 # =====================================================
 # CALLBACKS
