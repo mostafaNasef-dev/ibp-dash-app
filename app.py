@@ -1,10 +1,14 @@
-from dash import Dash, html, dcc
+from dash import Dash, html, dcc, dash_table
+import dash
 import dash_bootstrap_components as dbc
+from dash import Input, Output, State
 import psycopg2
 import pandas as pd
 import os
-from dash import dash_table
 
+# =====================================================
+# DATABASE HELPERS
+# =====================================================
 
 def get_conn():
     return psycopg2.connect(
@@ -51,19 +55,24 @@ def delete_product(code):
         )
         conn.commit()
 
-# ---------------- App ----------------
+# =====================================================
+# APP
+# =====================================================
+
 app = Dash(
     __name__,
     suppress_callback_exceptions=True,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
 )
 
-# ---------------- Layout ----------------
+# =====================================================
+# LAYOUT
+# =====================================================
+
 app.layout = html.Div([
     dcc.Location(id="url"),
 
     dbc.Row([
-        # -------- Sidebar --------
         dbc.Col(
             dbc.Nav(
                 [
@@ -85,7 +94,6 @@ app.layout = html.Div([
             },
         ),
 
-        # -------- Page Content --------
         dbc.Col(
             html.Div(id="page-content", style={"padding": "30px"}),
             width=10,
@@ -93,48 +101,53 @@ app.layout = html.Div([
     ])
 ])
 
-# ---------------- Pages ----------------
-def page_layout(title, text):
-    return html.Div([
-        html.H2(title),
-        html.P(text),
-    ])
+# =====================================================
+# ROUTING
+# =====================================================
 
-# ---------------- Routing ----------------
 @app.callback(
-    dcc.Output("page-content", "children"),
-    dcc.Input("url", "pathname"),
+    Output("page-content", "children"),
+    Input("url", "pathname"),
 )
 def render_page(pathname):
+
     if pathname == "/products":
-    df = load_products()
+        df = load_products()
+
+        return html.Div([
+            html.H2("📦 Product Master"),
+
+            dbc.Row([
+                dbc.Col([
+                    dbc.Input(id="p-code", placeholder="Product Code"),
+                    dbc.Input(id="p-name", placeholder="Product Name", className="mt-2"),
+                    dbc.Input(id="p-open", type="number", placeholder="Opening Inventory", className="mt-2"),
+                    dbc.Input(id="p-cap", type="number", placeholder="Monthly Capacity", className="mt-2"),
+                    dbc.Input(id="p-cost", type="number", placeholder="Unit Cost", className="mt-2"),
+                    dbc.Button("💾 Save Product", id="save-product", color="primary", className="mt-3"),
+                    dbc.Button("🗑 Delete Product", id="delete-product", color="danger", className="mt-2"),
+                ], width=4),
+
+                dbc.Col([
+                    dash_table.DataTable(
+                        id="product-table",
+                        data=df.to_dict("records"),
+                        columns=[{"name": c, "id": c} for c in df.columns],
+                        row_selectable="single",
+                        style_table={"overflowX": "auto"},
+                    )
+                ], width=8)
+            ])
+        ])
 
     return html.Div([
-        html.H2("📦 Product Master"),
-
-        dbc.Row([
-            dbc.Col([
-                dbc.Input(id="p-code", placeholder="Product Code"),
-                dbc.Input(id="p-name", placeholder="Product Name", className="mt-2"),
-                dbc.Input(id="p-open", type="number", placeholder="Opening Inventory", className="mt-2"),
-                dbc.Input(id="p-cap", type="number", placeholder="Monthly Capacity", className="mt-2"),
-                dbc.Input(id="p-cost", type="number", placeholder="Unit Cost", className="mt-2"),
-                dbc.Button("💾 Save Product", id="save-product", color="primary", className="mt-3"),
-                dbc.Button("🗑 Delete Product", id="delete-product", color="danger", className="mt-2"),
-            ], width=4),
-
-            dbc.Col([
-                dash_table.DataTable(
-                    id="product-table",
-                    data=df.to_dict("records"),
-                    columns=[{"name": c, "id": c} for c in df.columns],
-                    row_selectable="single",
-                    style_table={"overflowX": "auto"},
-                )
-            ], width=8)
-        ])
+        html.H2("🚀 IBP Dash App"),
+        html.P("Select a page from the left menu to start."),
     ])
-from dash import Input, Output, State
+
+# =====================================================
+# CALLBACKS
+# =====================================================
 
 @app.callback(
     Output("product-table", "data"),
@@ -163,7 +176,9 @@ def manage_products(save_clicks, delete_clicks, code, name, opening, capacity, c
 
     return load_products().to_dict("records")
 
+# =====================================================
+# RUN
+# =====================================================
 
-# ---------------- Run ----------------
 if __name__ == "__main__":
     app.run_server(host="0.0.0.0", port=8050)
