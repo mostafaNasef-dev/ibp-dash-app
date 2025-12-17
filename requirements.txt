@@ -1,9 +1,22 @@
+# Web framework
 dash
 dash-bootstrap-components
+gunicorn
+
+# Data & math
 pandas
 numpy
+
+# Database
 psycopg2-binary
+
+# Forecasting & ML
 scikit-learn
 statsmodels
-openpyxl
 xgboost
+
+# File handling
+openpyxl
+
+# Optional but recommended
+python-dateutil
