@@ -3,3 +3,4 @@ dash-bootstrap-components
 gunicorn
 psycopg2-binary
 pandas
+statsmodels
